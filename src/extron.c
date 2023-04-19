@@ -130,10 +130,10 @@ int extron_get_vertical_start(int fd) { return extron_simple_get(fd, "\eVSRT\r",
 int extron_inc_vertical_start(int fd) { return extron_simple_get(fd, "\e+VSRT\r", "Vsrt", 4); }
 int extron_dec_vertical_start(int fd) { return extron_simple_get(fd, "\e-VSRT\r", "Vsrt", 4); }
 
-int extron_set_phase_start(int fd, int val) { return extron_simple_set(fd, val, "\e%dPHAS\r", "Phas", 4); }
-int extron_get_phase_start(int fd) { return extron_simple_get(fd, "\ePHAS\r", "Phas", 4); }
-int extron_inc_phase_start(int fd) { return extron_simple_get(fd, "\e+PHAS\r", "Phas", 4); }
-int extron_dec_phase_start(int fd) { return extron_simple_get(fd, "\e-PHAS\r", "Phas", 4); }
+int extron_set_phase(int fd, int val) { return extron_simple_set(fd, val, "\e%dPHAS\r", "Phas", 4); }
+int extron_get_phase(int fd) { return extron_simple_get(fd, "\ePHAS\r", "Phas", 4); }
+int extron_inc_phase(int fd) { return extron_simple_get(fd, "\e+PHAS\r", "Phas", 4); }
+int extron_dec_phase(int fd) { return extron_simple_get(fd, "\e-PHAS\r", "Phas", 4); }
 
 int extron_set_total_pixels(int fd, int val) { return extron_simple_set(fd, val, "\e%dTPIX\r", "Tpix", 4); }
 int extron_get_total_pixels(int fd) { return extron_simple_get(fd, "\eTPIX\r", "Tpix", 4); }
