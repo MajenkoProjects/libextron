@@ -1,5 +1,7 @@
 CFLAGS=-I.
 
+DESTDIR?=/usr
+
 all: libextron.a test
 
 libextron.a: extron.o
@@ -12,3 +14,7 @@ test: test.o libextron.a
 
 clean:
 	rm -f test test.o lbextron.a extron.o
+
+install: libextron.a
+	install -m 644 libextron.a ${DESTDIR}/lib
+	install -m 644 extron.h ${DESTDIR}/include

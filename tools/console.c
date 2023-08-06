@@ -22,6 +22,10 @@ struct extron {
 	int size_y;
 	int zoom_x;
 	int zoom_y;
+
+	int brightness;
+	int contrast;
+	int detail;
 };
 
 void update_settings(int fd, struct extron *settings) {
@@ -35,6 +39,9 @@ void update_settings(int fd, struct extron *settings) {
 	settings->active_lines = extron_get_active_lines(fd);
 	settings->size_x = extron_get_horizontal_size(fd);
 	settings->size_y = extron_get_vertical_size(fd);
+	settings->brightness = extron_get_brightness(fd);
+	settings->contrast = extron_get_contrast(fd);
+	settings->detail = extron_get_detail_filter(fd);
 	extron_get_zoom(fd, &settings->zoom_x, &settings->zoom_y);
 }
 
@@ -52,6 +59,20 @@ WINDOW *init_scaling() {
 	mvwaddstr(scaling, 9, 2, "Z: Zoom");
 
 	return scaling;
+}
+
+WINDOW *init_image() {
+	WINDOW *image = newwin(12, 28, 2, 30);
+
+	wbkgd(image, COLOR_PAIR(1));
+	wborder_set(image, BOX_SINGLE);
+
+	mvwaddstr(image, 0, 1, "[ Image ]");
+	mvwaddstr(image, 3, 2, "B: Brightness");
+	mvwaddstr(image, 4, 2, "C: Contrast");
+	mvwaddstr(image, 5, 2, "D: Detail");
+
+	return image;
 }
 
 void update_scaling(WINDOW *win, struct extron *settings, int mode) {
@@ -87,7 +108,24 @@ void update_scaling(WINDOW *win, struct extron *settings, int mode) {
 	mvwaddstr(win, 9, 12, temp);
 
 	wrefresh(win);
+}
 
+void update_image(WINDOW *win, struct extron *settings, int mode) {
+	char temp[20];
+
+	snprintf(temp, 20, "%5d", settings->brightness);
+	wcolor_set(win, mode == 'b' ? 2 : 1, NULL);
+	mvwaddstr(win, 3, 20, temp);
+
+	snprintf(temp, 20, "%5d", settings->contrast);
+	wcolor_set(win, mode == 'c' ? 2 : 1, NULL);
+	mvwaddstr(win, 4, 20, temp);
+
+	snprintf(temp, 20, "%5d", settings->detail);
+	wcolor_set(win, mode == 'd' ? 2 : 1, NULL);
+	mvwaddstr(win, 5, 20, temp);
+
+	wrefresh(win);
 }
 
 void main() {
@@ -111,9 +149,10 @@ void main() {
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
 	init_pair(2, COLOR_YELLOW, COLOR_BLACK);
 
-	mvaddstr(0, 0, "F1: Auto-align | F10: Quit");
+	mvaddstr(0, 0, "F1: Auto-align | F5: Refresh | F10: Quit");
 
 	WINDOW *scaling = init_scaling();
+	WINDOW *image = init_image();
 
 	int mode = 0;
 
@@ -122,6 +161,7 @@ void main() {
 	while (1) {
 
 		update_scaling(scaling, &settings, mode);
+		update_image(image, &settings, mode);
 
 		int c = getch();
 
@@ -133,6 +173,9 @@ void main() {
 			case 'a':
 			case 'i':
 			case 'z':
+			case 'b':
+			case 'c':
+			case 'd':
 				mode = c;
 				break;
 
@@ -145,6 +188,9 @@ void main() {
 					case 'a': rval = extron_inc_active_lines(fd); if (rval > -1) settings.active_lines = rval; break;
 					case 'i': rval = extron_inc_vertical_size(fd); if (rval > -1) settings.size_y = rval; break;
 					case 'z': extron_zoom_in(fd, &settings.zoom_x, &settings.zoom_y); break;
+					case 'b': rval = extron_inc_brightness(fd); if (rval > -1) settings.brightness = rval; break;
+					case 'c': rval = extron_inc_contrast(fd); if (rval > -1) settings.contrast = rval; break;
+					case 'd': rval = extron_inc_detail_filter(fd); if (rval > -1) settings.detail = rval; break;
 				}
 				break;
 
@@ -157,6 +203,9 @@ void main() {
 					case 'a': rval = extron_dec_active_lines(fd); if (rval > -1) settings.active_lines = rval; break;
 					case 'i': rval = extron_dec_vertical_size(fd); if (rval > -1) settings.size_y = rval; break;
 					case 'z': extron_zoom_out(fd, &settings.zoom_x, &settings.zoom_y); break;
+					case 'b': rval = extron_dec_brightness(fd); if (rval > -1) settings.brightness = rval; break;
+					case 'c': rval = extron_dec_contrast(fd); if (rval > -1) settings.contrast = rval; break;
+					case 'd': rval = extron_dec_detail_filter(fd); if (rval > -1) settings.detail = rval; break;
 				}
 				break;
 
@@ -198,7 +247,13 @@ void main() {
 				wrefresh(popup);
 				delwin(popup);
 				touchwin(scaling);
+				touchwin(image);
 				break;
+
+			case KEY_F(5):
+				update_settings(fd, &settings);
+				break;
+				
 
 			case KEY_F(10):
 				endwin();
