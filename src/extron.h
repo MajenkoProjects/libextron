@@ -164,5 +164,8 @@ int extron_get_audio_delay(int);
 int extron_set_audio_bit_depth(int, int);
 int extron_get_audio_bit_depth(int);
 
+void extron_debug(void (*f)(const char *));
+int extron_need_reconfig();
+
 
 #endif

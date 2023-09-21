@@ -9,6 +9,74 @@
 #define BOX_DOUBLE WACS_D_VLINE, WACS_D_VLINE, WACS_D_HLINE, WACS_D_HLINE, WACS_D_ULCORNER, WACS_D_URCORNER, WACS_D_LLCORNER, WACS_D_LRCORNER
 #define BOX_NONE ' ',' ',' ',' ',' ',' ',' ',' '
 
+/* Allocated keys
+
+p:	Pan
+s:	Start
+h:	Phase
+t:	Total
+a:	Active
+i:	Size
+z:	Zoom
+b:	Brightness
+c:	Contrast
+d:	Detail
+r:  Resolution
+f:  Refresh
+*/
+
+WINDOW *debugwindow;
+
+
+const char *resolutions[] = {
+	NULL,
+	"640x480",   // 1
+	"800x600",   // 2
+	"852x480",   // 3
+	"1024x768",  // 4
+	"1024x852",  // 5
+	"1024x1024", // 6
+	"1280x768",  // 7
+	"1280x800",  // 8
+	"1280x1024", // 9
+	"1360x765",  // 10
+	"1360x768",  // 11
+	"1365x768",  // 12
+	"1366x768",  // 13
+	"1365x1024", // 14
+	"1440x900",  // 15
+	"1440x1050", // 16
+	"1680x1050", // 17
+	"1600x1200", // 18
+	"1920x1200", // 19
+	"480p",      // 20
+	"576p",      // 21
+	"720p",      // 22
+	"1080i",     // 23
+	"1080p",     // 24
+	"2048x1080", // 25
+	"1600x900",  // 26
+	NULL,
+	NULL,
+	NULL,
+	"AUTO",      // 30
+	"LOCK",      // 31
+	"OUTPUT",    // 32
+};
+
+const char *refreshes[] = {
+	"Auto",
+	"23.98Hz",
+	"24Hz",
+	"25Hz",
+	"29.97Hz",
+	"30Hz",
+	"50Hz",
+	"59.94Hz",
+	"60Hz",
+	"75Hz"
+};
+
 struct extron {
 	int pan_x;
 	int pan_y;
@@ -26,6 +94,8 @@ struct extron {
 	int brightness;
 	int contrast;
 	int detail;
+	int resolution;
+	int refresh;
 };
 
 void update_settings(int fd, struct extron *settings) {
@@ -42,6 +112,7 @@ void update_settings(int fd, struct extron *settings) {
 	settings->brightness = extron_get_brightness(fd);
 	settings->contrast = extron_get_contrast(fd);
 	settings->detail = extron_get_detail_filter(fd);
+	extron_get_scaler_rate(fd, &settings->resolution, &settings->refresh);
 	extron_get_zoom(fd, &settings->zoom_x, &settings->zoom_y);
 }
 
@@ -71,8 +142,16 @@ WINDOW *init_image() {
 	mvwaddstr(image, 3, 2, "B: Brightness");
 	mvwaddstr(image, 4, 2, "C: Contrast");
 	mvwaddstr(image, 5, 2, "D: Detail");
+	mvwaddstr(image, 6, 2, "R: Resolution");
+	mvwaddstr(image, 7, 2, "F: Refresh");
 
 	return image;
+}
+
+void debug(const char *str) {
+	waddstr(debugwindow, str);
+	waddstr(debugwindow, "\r\n");
+	wrefresh(debugwindow);
 }
 
 void update_scaling(WINDOW *win, struct extron *settings, int mode) {
@@ -125,17 +204,61 @@ void update_image(WINDOW *win, struct extron *settings, int mode) {
 	wcolor_set(win, mode == 'd' ? 2 : 1, NULL);
 	mvwaddstr(win, 5, 20, temp);
 
+	snprintf(temp, 20, "%10s", resolutions[settings->resolution]);
+	wcolor_set(win, mode == 'r' ? 2 : 1, NULL);
+	mvwaddstr(win, 6, 15, temp);
+
+	snprintf(temp, 20, "%10s", refreshes[settings->refresh]);
+	wcolor_set(win, mode == 'f' ? 2 : 1, NULL);
+	mvwaddstr(win, 7, 15, temp);
+
 	wrefresh(win);
 }
+
+void inc_resolution(int fd, struct extron *settings) {
+	if (settings->resolution >= 32) {
+		return;
+	}
+	settings->resolution++;
+	if (settings->resolution == 27) settings->resolution = 30;
+	if (settings->resolution == 28) settings->resolution = 30;
+	if (settings->resolution == 29) settings->resolution = 30;
+	extron_set_scaler_rate(fd, settings->resolution, settings->refresh);
+}
+
+void dec_resolution(int fd, struct extron *settings) {
+	if (settings->resolution <= 1) {
+		return;
+	}
+	settings->resolution--;
+	if (settings->resolution == 27) settings->resolution = 26;
+	if (settings->resolution == 28) settings->resolution = 26;
+	if (settings->resolution == 29) settings->resolution = 26;
+	extron_set_scaler_rate(fd, settings->resolution, settings->refresh);
+}
+
+void inc_refresh(int fd, struct extron *settings) {
+	if (settings->refresh >= 9) {
+		return;
+	}
+	settings->refresh++;
+	extron_set_scaler_rate(fd, settings->resolution, settings->refresh);
+}
+
+void dec_refresh(int fd, struct extron *settings) {
+	if (settings->refresh <= 0) {
+		return;
+	}
+	settings->refresh--;
+	extron_set_scaler_rate(fd, settings->resolution, settings->refresh);
+}
+
 
 void main() {
 	int rval;
 
-	int fd = extron_connect("/dev/ttyS0");
+	extron_debug(debug);
 
-	struct extron settings;
-
-	update_settings(fd, &settings);
 
 	initscr();
 	start_color();
@@ -145,11 +268,23 @@ void main() {
 	noecho();
 	curs_set(0);
 
+
 	refresh();
 	init_pair(1, COLOR_WHITE, COLOR_BLACK);
 	init_pair(2, COLOR_YELLOW, COLOR_BLACK);
 
+	debugwindow = newwin(5, 80, 20, 0);
+	idlok(debugwindow, 1);
+	scrollok(debugwindow, 1);
+	mvwaddstr(debugwindow, 0, 0, "Debug\r\n");
+
 	mvaddstr(0, 0, "F1: Auto-align | F5: Refresh | F10: Quit");
+
+	int fd = extron_connect("/dev/ttyS0");
+
+	struct extron settings;
+
+	update_settings(fd, &settings);
 
 	WINDOW *scaling = init_scaling();
 	WINDOW *image = init_image();
@@ -176,6 +311,8 @@ void main() {
 			case 'b':
 			case 'c':
 			case 'd':
+			case 'r':
+			case 'f':
 				mode = c;
 				break;
 
@@ -191,6 +328,8 @@ void main() {
 					case 'b': rval = extron_inc_brightness(fd); if (rval > -1) settings.brightness = rval; break;
 					case 'c': rval = extron_inc_contrast(fd); if (rval > -1) settings.contrast = rval; break;
 					case 'd': rval = extron_inc_detail_filter(fd); if (rval > -1) settings.detail = rval; break;
+					case 'r': inc_resolution(fd, &settings); break;
+					case 'f': inc_refresh(fd, &settings); break;
 				}
 				break;
 
@@ -206,6 +345,8 @@ void main() {
 					case 'b': rval = extron_dec_brightness(fd); if (rval > -1) settings.brightness = rval; break;
 					case 'c': rval = extron_dec_contrast(fd); if (rval > -1) settings.contrast = rval; break;
 					case 'd': rval = extron_dec_detail_filter(fd); if (rval > -1) settings.detail = rval; break;
+					case 'r': dec_resolution(fd, &settings); break;
+					case 'f': dec_refresh(fd, &settings); break;
 				}
 				break;
 
@@ -218,6 +359,8 @@ void main() {
 					case 'a': rval = extron_dec_active_pixels(fd); if (rval > -1) settings.active_pixels = rval; break;
 					case 'i': rval = extron_dec_horizontal_size(fd); if (rval > -1) settings.size_x = rval; break;
 					case 'z': extron_zoom_out(fd, &settings.zoom_x, &settings.zoom_y); break;
+					case 'r': dec_resolution(fd, &settings); break;
+					case 'f': dec_refresh(fd, &settings); break;
 				}
 				break;
 
@@ -230,6 +373,8 @@ void main() {
 					case 'a': rval = extron_inc_active_pixels(fd); if (rval > -1) settings.active_pixels = rval; break;
 					case 'i': rval = extron_inc_horizontal_size(fd); if (rval > -1) settings.size_x = rval; break;
 					case 'z': extron_zoom_in(fd, &settings.zoom_x, &settings.zoom_y); break;
+					case 'r': inc_resolution(fd, &settings);
+					case 'f': inc_refresh(fd, &settings);
 				}
 				break;
 
@@ -251,13 +396,23 @@ void main() {
 				break;
 
 			case KEY_F(5):
+				write(fd, "\r\r\r\r\r", 5);
+				extron_disconnect(fd);
+				sleep(1);
+    			fd = extron_connect("/dev/ttyS0");
 				update_settings(fd, &settings);
+				touchwin(scaling);
+				touchwin(image);
+				wrefresh(scaling);
+				wrefresh(image);
 				break;
 				
 
 			case KEY_F(10):
-				endwin();
 				extron_disconnect(fd);
+				echo();
+				cbreak();
+				endwin();
 				return;
 		}
 	}

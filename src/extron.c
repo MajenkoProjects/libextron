@@ -5,7 +5,24 @@
 #include <termios.h>
 #include <sys/time.h>
 #include <string.h>
+#include <stdarg.h>
 #include <extron.h>
+
+static void (*_debug)(const char *) = NULL;
+static int _need_reconfig = 0;
+
+static inline void _log(const char *fmt, ...) {
+	va_list argp;
+	va_start(argp, fmt);
+
+	char tmp[1024];
+	vsnprintf(tmp, 1024, fmt, argp);
+	va_end(argp);
+	
+	if (_debug != NULL) {
+		_debug(tmp);
+	}
+}
 
 int extron_connect(const char *dev) {
 	int fd = open(dev, O_RDWR|O_NOCTTY);
@@ -20,21 +37,31 @@ int extron_connect(const char *dev) {
 	cfsetispeed(&options, B9600);
 	cfsetospeed(&options, B9600);
 	tcsetattr(fd, TCSANOW, &options);
+	_log("connected, FD %d\n", fd);
 	return fd;
 }
 
 int extron_disconnect(int fd) {
 	close(fd);
+	_log("disconnected\n");
 	return 1;
 }
 
 static int extron_command(int fd, const char *out, char *in) {
+	_log("Write: %s\n", out);
 	write(fd, out, strlen(out));
 	int pos = 0;
 	char c;
 	while (read(fd, &c, 1) == 1) {
 		switch (c) {
 			case '\n':
+				if (!strcmp(in, "Reconfig")) {
+					pos = 0;
+					in[0] = 0;
+					_need_reconfig = 1;
+					break;
+				}
+				_log("Read: %s\n", in);
 				return pos;
 			case '\r':
 				break;
@@ -322,3 +349,13 @@ int extron_get_audio_delay(int fd) { return extron_simple_get(fd, "\eSADLY\r", "
 int extron_set_audio_bit_depth(int fd, int val) { return extron_simple_set(fd, val, "\eA%dBITD\r", "BitdA", 5); }
 int extron_get_audio_bit_depth(int fd) { return extron_simple_get(fd, "\eABITD\r", "BitdA", 5); }
 
+
+void extron_debug(void (*f)(const char *)) {
+	_debug = f;
+}
+
+int extron_need_reconfig() {
+	int f = _need_reconfig;
+	_need_reconfig = 0;
+	return f;
+}
